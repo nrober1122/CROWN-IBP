@@ -11,6 +11,7 @@ from torch.utils import data
 from functools import partial
 import torchvision.transforms as transforms
 import torchvision.datasets as datasets
+import pickle
 
 # compute image statistics (by Andreas https://discuss.pytorch.org/t/computing-the-mean-and-std-of-dataset/34949/4)
 def get_stats(loader):
@@ -43,6 +44,64 @@ def mnist_loaders(dataset, batch_size, shuffle_train = True, shuffle_test = Fals
     if test_batch_size:
         batch_size = test_batch_size
     test_loader = torch.utils.data.DataLoader(mnist_test, batch_size=batch_size, shuffle=shuffle_test, pin_memory=True, num_workers=min(multiprocessing.cpu_count(),2))
+    std = [1.0]
+    mean = [0.0]
+    train_loader.std = std
+    test_loader.std = std
+    train_loader.mean = mean
+    test_loader.mean = mean
+    return train_loader, test_loader
+
+class DIDataset(torch.utils.data.Dataset):
+
+    def __init__(self, X_Train, Y_Train, transform=None):
+        self.X_Train = X_Train
+        self.Y_Train = Y_Train
+        self.transform = transform
+
+    def __len__(self):
+        return len(self.X_Train)
+
+    def __getitem__(self, idx):
+        if torch.is_tensor(idx):
+            idx = idx.tolist()
+
+        x = self.X_Train[idx]
+        y = self.Y_Train[idx]
+
+        if self.transform:
+            x = self.transform(x)
+            y = self.transform(y)
+
+        return x, y
+
+def double_integrator_loaders(batch_size, shuffle_train = True, shuffle_test = False, normalize_input = False, num_examples = None, test_batch_size=None): 
+    file = open('/home/nick/Documents/code/nfl_veripy/nfl_veripy/src/nfl_veripy/_static/datasets/double_integrator_train/xs.pkl', 'rb')
+    X_train = pickle.load(file)
+    file.close()
+
+    file = open('/home/nick/Documents/code/nfl_veripy/nfl_veripy/src/nfl_veripy/_static/datasets/double_integrator_train/us.pkl', 'rb')
+    Y_train = pickle.load(file)
+    file.close()
+
+    train_dataset = DIDataset(torch.tensor(X_train, dtype=torch.float32), torch.tensor(Y_train, dtype=torch.float32), transform=None)
+    train_loader = torch.utils.data.DataLoader(train_dataset, batch_size=batch_size, shuffle=shuffle_train, num_workers=0)
+
+
+    file = open('/home/nick/Documents/code/nfl_veripy/nfl_veripy/src/nfl_veripy/_static/datasets/double_integrator_val/xs.pkl', 'rb')
+    X_test = pickle.load(file)
+    file.close()
+
+    file = open('/home/nick/Documents/code/nfl_veripy/nfl_veripy/src/nfl_veripy/_static/datasets/double_integrator_val/us.pkl', 'rb')
+    Y_test = pickle.load(file)
+    file.close()
+
+    test_dataset = DIDataset(torch.tensor(X_test, dtype=torch.float32), torch.tensor(Y_test, dtype=torch.float32), transform=None)
+    test_loader = torch.utils.data.DataLoader(test_dataset, batch_size=batch_size, shuffle=shuffle_test, num_workers=0)
+
+    if test_batch_size:
+        batch_size = test_batch_size
+
     std = [1.0]
     mean = [0.0]
     train_loader.std = std
@@ -150,6 +209,7 @@ def svhn_loaders(batch_size, shuffle_train = True, shuffle_test = False, train_r
 # when new loaders is added, they must be registered here
 loaders = {
         "mnist": partial(mnist_loaders, datasets.MNIST),
+        "double_integrator": double_integrator_loaders,
         "fashion-mnist": partial(mnist_loaders, datasets.FashionMNIST),
         "cifar": cifar_loaders,
         "svhn": svhn_loaders,
